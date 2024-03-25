@@ -17,10 +17,22 @@ datasource db {
 model Holder {
   id             String     @id @default(uuid())
   address        String     @unique
+  holderScore    BigInt     @default(0)
   MrCryptosOwned MrCrypto[]
   E7LTokensOwned E7LToken[]
 
   @@index([address])
+}
+
+model IndexationIteration {
+  id              String    @id @default(uuid())
+  fromBlockNumber BigInt
+  fromDateTime    DateTime
+  toBlockNumber   BigInt
+  toDateTime      DateTime
+  starterAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  secondsElapsed  Int?
 }
 
 model MrCrypto {
@@ -37,18 +49,19 @@ model MrCrypto {
   attHeadwear       String
   attEyes           String
   attMoustache      String
-  totalScore        Float
+  rarityScore       Float
+  rarityRanking     Int
   Transfers         Transfer[]
   E7LTokensLinked   E7LToken[]
 
-  @@index([ownerId, tokenId])
+  @@index([ownerId, tokenId, rarityScore, rarityRanking])
 }
 
 model E7L {
   id               String     @id @default(uuid())
-  name             String
+  name             String     @unique
   deployedBlock    BigInt
-  contractAddress  String
+  contractAddress  String     @unique
   lastBlockIndexed BigInt
   imageURL         String
   Tokens           E7LToken[]
@@ -60,7 +73,7 @@ model E7LToken {
   mrcryptoTokenId Int?
   MrCrypto        MrCrypto? @relation(fields: [mrcryptoTokenId], references: [tokenId])
   linkedAt        BigInt
-  E7L             E7L       @relation(fields: [e7lId], references: [id])
+  E7L             E7L       @relation(fields: [e7lId], references: [id], onDelete: Cascade)
   e7lId           String
   metadataURL     String
   imageURL        String

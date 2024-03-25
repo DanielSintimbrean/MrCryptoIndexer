@@ -1,26 +1,39 @@
 import { prisma } from "@/db";
-import { BLOCKS_PER_QUERY, bigIntMax, bigIntMin, client } from "./common";
+import {
+  BLOCKS_PER_QUERY,
+  MRCRYPTO_ADDRESS,
+  bigIntMax,
+  bigIntMin,
+  client,
+} from "./common";
 import { abiMrcrypto } from "./abis/abi-mrcrypto";
-import { formatEther, formatUnits, zeroAddress } from "viem";
+import { formatEther, formatUnits } from "viem";
 import { abiWETH } from "./abis/abi-weth";
 import { metadata } from "./metadata";
 import { Payment } from "@prisma/client";
-import { constants } from "buffer";
 
-const MRCRYPTO_DEPLOY_BLOCK: bigint = BigInt(25839542 - 1);
-const MRCRYPTO_ADDRESS = "0xeF453154766505FEB9dBF0a58E6990fd6eB66969";
+const MRCRYPTO_DEPLOY_BLOCK: bigint = 25839541n as const;
 
-const USDC_ADDRESS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
-const WETH_ADDRESS = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619";
+const USDC_ADDRESS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" as const;
+const WETH_ADDRESS = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619" as const;
 
 export async function indexMrCrypto(currentBlock: bigint) {
-  const raw = await prisma.mrCrypto.aggregate({
+  const lastIteration = await prisma.indexationIteration.aggregate({
+    _max: {
+      toBlockNumber: true,
+    },
+  });
+
+  const lastMrCryptoTransferred = await prisma.mrCrypto.aggregate({
     _max: {
       lastTransferBlock: true,
     },
   });
 
-  const lastTransferBlock = raw._max.lastTransferBlock ?? 0n;
+  const lastTransferBlock = bigIntMax(
+    lastIteration._max.toBlockNumber ?? 0n,
+    lastMrCryptoTransferred._max.lastTransferBlock ?? 0n,
+  );
 
   for (
     let block = bigIntMax(MRCRYPTO_DEPLOY_BLOCK, lastTransferBlock + 1n);
@@ -28,10 +41,25 @@ export async function indexMrCrypto(currentBlock: bigint) {
     block += BLOCKS_PER_QUERY
   ) {
     const fromBlock = block;
-    const toBlock = bigIntMin(
-      block + BLOCKS_PER_QUERY - BigInt(1),
-      currentBlock,
-    );
+    const toBlock = bigIntMin(block + BLOCKS_PER_QUERY - 1n, currentBlock);
+
+    const fromTimestamp = (await client.getBlock({ blockNumber: fromBlock }))
+      .timestamp;
+    const fromDate = new Date(Number(fromTimestamp) * 1000);
+
+    const toTimestamp = (await client.getBlock({ blockNumber: toBlock }))
+      .timestamp;
+    const toDate = new Date(Number(toTimestamp) * 1000);
+
+    const iteration = await prisma.indexationIteration.create({
+      data: {
+        fromBlockNumber: fromBlock,
+        toBlockNumber: toBlock,
+        fromDateTime: fromDate,
+        toDateTime: toDate,
+      },
+    });
+
     const filter = await client.createContractEventFilter({
       abi: abiMrcrypto,
       address: MRCRYPTO_ADDRESS,
@@ -44,8 +72,8 @@ export async function indexMrCrypto(currentBlock: bigint) {
 
     const logs = await client.getFilterLogs({ filter });
     const logsOrdered = logs.sort((a, b) => {
-      const aBlock = a.blockNumber ?? BigInt(0);
-      const bBlock = b.blockNumber ?? BigInt(0);
+      const aBlock = a.blockNumber ?? 0n;
+      const bBlock = b.blockNumber ?? 0n;
 
       if (aBlock > bBlock) return 1;
 
@@ -144,6 +172,21 @@ export async function indexMrCrypto(currentBlock: bigint) {
         });
       }
     }
+
+    const finishedAt = new Date();
+    const secondsElapsed = Math.floor(
+      finishedAt.getTime() / 1000 - iteration.starterAt.getTime() / 1000,
+    );
+
+    await prisma.indexationIteration.update({
+      where: {
+        id: iteration.id,
+      },
+      data: {
+        finishedAt,
+        secondsElapsed,
+      },
+    });
   }
 }
 
@@ -192,8 +235,8 @@ async function checkForUSDCTransfer(
     abi: abiWETH,
     eventName: "Transfer",
     address: USDC_ADDRESS,
-    fromBlock: blockNumber ?? BigInt(0),
-    toBlock: blockNumber ?? BigInt(0),
+    fromBlock: blockNumber ?? 0n,
+    toBlock: blockNumber ?? 0n,
   });
 
   const logs = await client.getFilterLogs({ filter });
@@ -237,7 +280,8 @@ async function updateOrCreateMrCrypto(
       attMoustache: metadata[tokenId].attributes.Moustache,
       attType: metadata[tokenId].attributes.Type,
       metadataURL: `https://apinft.racksmafia.com/api/${tokenId}.json`,
-      totalScore: metadata[tokenId].total_score,
+      rarityScore: metadata[tokenId].total_score,
+      rarityRanking: metadata[tokenId].ranking,
       lastTransferBlock: block,
       Owner: {
         connectOrCreate: {

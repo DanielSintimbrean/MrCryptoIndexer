@@ -1,5 +1,10 @@
+// ==============================================================
+// NOTE: run this script to generate the index.ts file, to run
+// this script, run `pnpm metadata:codegen` in the root directory
+// ==============================================================
 import data from "./_metadata_save.json";
 import ranking from "./_ranking.json";
+import * as prettier from "prettier";
 
 import fs from "fs";
 import path from "path";
@@ -12,8 +17,9 @@ const res: Record<
   number,
   {
     image: string;
-    toal_score: number;
-    atributes: {
+    total_score: number;
+    ranking: number;
+    attributes: {
       Background: string;
       Clothes: string;
       Eyes: string;
@@ -27,8 +33,9 @@ const res: Record<
 metadata.forEach((element) => {
   res[element.edition] = {
     image: element.image,
-    toal_score: 0,
-    atributes: {
+    total_score: 0,
+    ranking: 0,
+    attributes: {
       Background: element.attributes[0].value,
       Clothes: element.attributes[1].value,
       Type: element.attributes[2].value,
@@ -39,14 +46,45 @@ metadata.forEach((element) => {
   };
 });
 
-rankingData.forEach((element) => {
-  res[element.index].toal_score = Number(element.total_score.toFixed(2));
+rankingData.forEach((element, ranking) => {
+  res[element.index].total_score = Number(element.total_score.toFixed(2));
+  res[element.index].ranking = ranking + 1;
 });
 
-const out = path.resolve(__dirname, "./metadata.ts");
+const out = path.resolve(__dirname, "./index.ts");
+const prettierConfigPath = path.resolve(__dirname, "../../../.prettierrc.mjs");
 
-fs.writeFileSync(
-  out,
-  `export const metadata : Record<number, { image: string; toal_score: number; atributes: { Background: string; Clothes: string; Eyes: string; Headwear: string; Moustache: string; Type: string; }; }> 
-  = ${JSON.stringify(res, null, 2)}`,
-);
+// prettier-ignore
+const header = 
+`// ==================================================
+// Auto generate code. Please don't edit it manually!
+// 
+// Generates with \`pnpm metadata:codegen\`
+// ==================================================\n\n`
+
+// prettier-ignore
+let code = 
+`export const metadata: Record<
+  number,
+  {
+    image: string;
+    ranking: number;
+    total_score: number;
+    attributes: {
+      Background: string;
+      Clothes: string;
+      Eyes: string;
+      Headwear: string;
+      Moustache: string;
+      Type: string;
+    };
+  } 
+> = ${JSON.stringify(res, null, 2)}`;
+
+prettier
+  .resolveConfig(prettierConfigPath)
+  .then((options) =>
+    prettier
+      .format(header + code, { ...options, filepath: out })
+      .then((formattedCode) => fs.writeFileSync(out, formattedCode)),
+  );

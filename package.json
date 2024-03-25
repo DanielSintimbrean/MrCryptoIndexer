@@ -4,22 +4,26 @@
   "description": "",
   "main": "index.js",
   "engines": {
-    "node": ">=v20.8.1"
+    "node": "v20.9.0"
   },
+  "workspaces": [
+    "web"
+  ],
   "packageManager": "pnpm@8.10.2",
   "scripts": {
     "start": "pnpm build && node dist/server",
     "clean": "git clean -xdf dist",
     "clean:node": "git clean -xdf node_modules",
+    "metadata:codegen": "pnpm ts-node src/indexer/metadata/script.ts",
     "lint": "tsc --noEmit --pretty",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
-    "build": "npm -s run clean && npm -s run db:generate && tsup && npm run build:schema",
+    "build": "npm -s run db:generate && tsup && npm run build:schema",
     "build:schema": "ts-node -r tsconfig-paths/register src/schema/index.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "db:seed": "prisma db push --force-reset && npx prisma db seed",
+    "db:seed": "prisma db seed",
     "db:reset": "prisma db push --force-reset"
   },
   "prisma": {
@@ -29,26 +33,33 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/node": "20.8.10",
-    "@types/ws": "^8.5.8",
+    "@types/bcryptjs": "2.4.6",
+    "@types/jsonwebtoken": "9.0.5",
+    "@types/node": "20.9.2",
+    "@types/ws": "^8.5.9",
     "cross-env": "7.0.3",
-    "prettier": "^3.0.3",
-    "prisma": "^5.5.2",
+    "prettier": "^3.1.0",
+    "prisma": "^5.6.0",
     "ts-node": "10.9.1",
     "ts-node-dev": "2.0.0",
     "tsconfig-paths": "^4.2.0",
-    "tsup": "^7.2.0"
+    "tsup": "^8.0.0"
   },
   "dependencies": {
     "@graphql-tools/schema": "^10.0.0",
     "@pothos/core": "^3.38.0",
     "@pothos/plugin-prisma": "^3.61.0",
     "@pothos/plugin-relay": "^3.44.0",
-    "@prisma/client": "^5.5.2",
+    "@pothos/plugin-scope-auth": "^3.20.0",
+    "@prisma/client": "^5.6.0",
+    "@t3-oss/env-core": "^0.7.1",
+    "bcryptjs": "2.4.3",
     "graphql": "^16.8.1",
     "graphql-scalars": "^1.22.4",
     "graphql-yoga": "5.0.0",
+    "jsonwebtoken": "9.0.2",
     "typescript": "5.2.2",
-    "viem": "^1.18.3"
+    "viem": "^1.19.3",
+    "zod": "^3.22.4"
   }
 }

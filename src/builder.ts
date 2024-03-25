@@ -1,13 +1,21 @@
 import SchemaBuilder from "@pothos/core";
 import PrismaPlugin from "@pothos/plugin-prisma";
 import RelayPlugin from "@pothos/plugin-relay";
+import ScopeAuthPlugin from "@pothos/plugin-scope-auth";
+
 import type PrismaTypes from "@pothos/plugin-prisma/generated";
 import { DateTimeResolver, BigIntResolver } from "graphql-scalars";
 import { prisma } from "@/db";
+import { isIndexerCronJobRunning, startIndexation } from "./indexer";
 
 export const builder = new SchemaBuilder<{
   PrismaTypes: PrismaTypes;
-  Context: {};
+  Context: {
+    isAuthenticated: boolean;
+  };
+  AuthScopes: {
+    isAuthenticated: boolean;
+  };
   Scalars: {
     DateTime: {
       Input: Date;
@@ -19,7 +27,11 @@ export const builder = new SchemaBuilder<{
     };
   };
 }>({
-  plugins: [PrismaPlugin, RelayPlugin],
+  plugins: [PrismaPlugin, RelayPlugin, ScopeAuthPlugin],
+  authScopes: async (context) => ({
+    isAuthenticated: context.isAuthenticated,
+  }),
+  scopeAuthOptions: {},
   relayOptions: {
     clientMutationId: "omit",
     cursorType: "String",
@@ -67,6 +79,16 @@ CollectionInfo.implement({
 
 builder.queryType({
   fields: (t) => ({
+    isAuthenticated: t.field({
+      type: "Boolean",
+      resolve: (_root, _args, context) => context.isAuthenticated,
+    }),
+    isIndexerCronJobRunning: t.field({
+      type: "Boolean",
+
+      authScopes: { isAuthenticated: true },
+      resolve: () => isIndexerCronJobRunning,
+    }),
     collectionInfo: t.field({
       type: CollectionInfo,
       resolve: async () => {
@@ -122,6 +144,18 @@ builder.queryType({
           )} ${lastSale.Payment!.Currency[0].name}`,
           volumen,
         };
+      },
+    }),
+  }),
+});
+
+builder.mutationType({
+  fields: (t) => ({
+    // Add mutation that returns a simple boolean
+    startIndexationManually: t.string({
+      authScopes: { isAuthenticated: true },
+      resolve: () => {
+        return startIndexation();
       },
     }),
   }),
